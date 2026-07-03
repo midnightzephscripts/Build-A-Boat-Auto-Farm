@@ -1,21 +1,16 @@
--- Wait for the game to fully load before running
-if not game:IsLoaded() then
-	game.Loaded:Wait()
-end
-
 -- Services
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 
 -- Player Variables
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui", 10)
+local playerGui = player:WaitForChild("PlayerGui")
 
 -- Configuration
 local START_POS = Vector3.new(-137, 60, 1297)
 local END_POS = Vector3.new(-156, 32, 8276)
 local SIMULATED_WALKSPEED = 200
-local STUCK_THRESHOLD = 5 
+local STUCK_THRESHOLD = 5 -- Seconds before forcing a reset if not moving
 
 -- Create ScreenGUI
 local screenGui = Instance.new("ScreenGui")
@@ -46,6 +41,7 @@ end
 -- Main Loop Function
 local function runLoop()
 	while isLooping do
+		-- Guard clause: Always ensure we have a fresh, fully loaded character
 		local character = player.Character
 		if not character or not character:IsDescendantOf(workspace) or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
 			character = player.CharacterAdded:Wait()
@@ -55,17 +51,21 @@ local function runLoop()
 		local humanoid = character:WaitForChild("Humanoid", 5)
 		
 		if hrp and humanoid and humanoid.Health > 0 then
+			-- 1. Teleport to initial position
 			hrp.CFrame = CFrame.new(START_POS)
-			task.wait(0.2)
+			task.wait(0.2) -- Slightly longer wait to let the map/physics register the teleport
 			
+			-- Enable PlatformStand so physics/falling states don't stop the tween
 			humanoid.PlatformStand = true
 			
+			-- 2. Setup and play Tween
 			local duration = getTweenDuration(START_POS, END_POS, SIMULATED_WALKSPEED)
 			local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 			local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(END_POS)})
 			
 			tween:Play()
 			
+			-- Watchdog variables to monitor if the character gets stuck
 			local lastPosition = hrp.Position
 			local timeStuck = 0
 			local tweenCompleted = false
@@ -75,39 +75,47 @@ local function runLoop()
 				tweenCompleted = true
 			end)
 			
+			-- 3. Active Monitoring Loop (Checks every 0.1s for completion, death, or stuck status)
 			while not tweenCompleted and isLooping and humanoid.Health > 0 and character:IsDescendantOf(workspace) do
 				task.wait(0.1)
 				
+				-- Stuck detection logic
 				if (hrp.Position - lastPosition).Magnitude < 1 then
 					timeStuck = timeStuck + 0.1
 					if timeStuck >= STUCK_THRESHOLD then
-						humanoid.Health = 0 
+						warn("[Auto-Farm] Character detected as stuck! Forcing reset...")
+						humanoid.Health = 0 -- Kill the character to force a refresh/respawn
 						break
 					end
 				else
 					lastPosition = hrp.Position
-					timeStuck = 0 
+					timeStuck = 0 -- Reset stuck timer if moving successfully
 				end
 			end
 			
 			if connection then connection:Disconnect() end
 			tween:Cancel()
 			
+			-- Clean up platform stand if we stopped mid-way safely
 			if not isLooping and humanoid.Health > 0 then
 				humanoid.PlatformStand = false
 				break
 			end
 			
+			-- 4. Drop to floor / Post-Tween Wait
 			if humanoid.Health > 0 then
 				humanoid.PlatformStand = false
 				
+				-- Wait until the character naturally dies/despawns or is removed
 				while character:IsDescendantOf(workspace) and humanoid.Health > 0 and isLooping do
 					task.wait(0.1)
 				end
 			end
 			
+			-- Final toggle safety check before going to respawn timers
 			if not isLooping then break end
 			
+			-- 5. Standard Respawn Delays
 			task.wait(5)
 			task.wait(0.5)
 		else
