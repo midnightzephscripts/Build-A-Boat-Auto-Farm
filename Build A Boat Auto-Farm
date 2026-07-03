@@ -1,8 +1,3 @@
-The issue with the loop breaking or failing to restart usually happens because the script gets caught waiting for a character that has already been destroyed, or it doesn't wait properly for the health to completely restore to maximum.
-
-Here is the fixed script. The character loading logic has been reworked to explicitly yield until a completely new character spawns and their health is back at full (`humanoid.Health >= humanoid.MaxHealth`) before executing the next teleportation run.
-
-```lua
 -- Services
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
