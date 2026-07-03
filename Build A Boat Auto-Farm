@@ -1,0 +1,102 @@
+-- Services
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+
+-- Player Variables
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Configuration
+local START_POS = Vector3.new(-137, 60, 1297)
+local END_POS = Vector3.new(-156, 32, 8276)
+local SIMULATED_WALKSPEED = 200
+
+-- Create ScreenGUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TeleportToggleGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+-- Create Toggle Button
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 200, 0, 50)
+toggleButton.Position = UDim2.new(0.5, -100, 0.1, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50) -- Red initially
+toggleButton.Text = "Auto-Farm: OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 24
+toggleButton.Parent = screenGui
+
+-- State Variable
+local isLooping = false
+
+-- Function to calculate duration based on distance and speed
+local function getTweenDuration(p1, p2, speed)
+	local distance = (p1 - p2).Magnitude
+	return distance / speed
+end
+
+-- Main Loop Function
+local function runLoop()
+	while isLooping do
+		local character = player.Character or player.CharacterAdded:Wait()
+		local hrp = character:WaitForChild("HumanoidRootPart", 5)
+		local humanoid = character:WaitForChild("Humanoid", 5)
+		
+		if hrp and humanoid and humanoid.Health > 0 then
+			-- 1. Teleport to initial position
+			hrp.CFrame = CFrame.new(START_POS)
+			task.wait(0.1) -- Short pause to let physics settle
+			
+			-- 2. Setup and play Tween to destination
+			local duration = getTweenDuration(START_POS, END_POS, SIMULATED_WALKSPEED)
+			local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+			local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(END_POS)})
+			
+			tween:Play()
+			
+			-- Wait for tween to finish, or stop if untoggled mid-tween
+			local tweenCompleted = false
+			local connection
+			connection = tween.Completed:Connect(function()
+				tweenCompleted = true
+			end)
+			
+			while not tweenCompleted and isLooping and humanoid.Health > 0 do
+				task.wait(0.1)
+			end
+			
+			if not isLooping then
+				tween:Cancel()
+				connection:Disconnect()
+				break
+			end
+			connection:Disconnect()
+			
+			-- 3. Wait 5 seconds for respawn (if character dies/resets at end)
+			task.wait(5)
+			
+			-- 4. Wait an additional 0.5 seconds before repeating
+			task.wait(0.5)
+		else
+			-- If character isn't loaded properly, wait a bit before retrying
+			task.wait(1)
+		end
+	end
+end
+
+-- Toggle Button Logic
+toggleButton.MouseButton1Click:Connect(function()
+	isLooping = not isLooping
+	
+	if isLooping then
+		toggleButton.Text = "Auto-Farm: On"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50) -- Green
+		-- Run the loop in a separate thread so it doesn't freeze the script
+		task.spawn(runLoop)
+	else
+		toggleButton.Text = "Auto-Farm: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50) -- Red
+	end
+end)
