@@ -21,8 +21,8 @@ screenGui.Parent = playerGui
 local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0, 200, 0, 50)
 toggleButton.Position = UDim2.new(0.5, -100, 0.1, 0)
-toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50) -- Red initially
-toggleButton.Text = "Auto-Farm: OFF"
+toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
+toggleButton.Text = "Loop: OFF"
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Font = Enum.Font.SourceSansBold
 toggleButton.TextSize = 24
@@ -47,40 +47,62 @@ local function runLoop()
 		if hrp and humanoid and humanoid.Health > 0 then
 			-- 1. Teleport to initial position
 			hrp.CFrame = CFrame.new(START_POS)
-			task.wait(0.1) -- Short pause to let physics settle
+			task.wait(0.1)
 			
-			-- 2. Setup and play Tween to destination
+			-- Enable PlatformStand so animations/physics don't interfere
+			humanoid.PlatformStand = true
+			
+			-- 2. Setup and play Tween (Linear ensuring absolutely constant speed)
 			local duration = getTweenDuration(START_POS, END_POS, SIMULATED_WALKSPEED)
-			local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+			local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 			local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(END_POS)})
 			
 			tween:Play()
 			
-			-- Wait for tween to finish, or stop if untoggled mid-tween
+			-- Track status
 			local tweenCompleted = false
 			local connection
 			connection = tween.Completed:Connect(function()
 				tweenCompleted = true
 			end)
 			
+			-- Monitor the tween actively
 			while not tweenCompleted and isLooping and humanoid.Health > 0 do
 				task.wait(0.1)
 			end
 			
-			if not isLooping then
+			-- Cleanup connection immediately
+			if connection then connection:Disconnect() end
+			
+			-- 3. Drop to the floor / Handle interruption or death
+			if not isLooping or humanoid.Health <= 0 then
 				tween:Cancel()
-				connection:Disconnect()
+				if humanoid.Health > 0 then
+					humanoid.PlatformStand = false
+				end
 				break
 			end
-			connection:Disconnect()
 			
-			-- 3. Wait 5 seconds for respawn (if character dies/resets at end)
+			-- Stop the tween explicitly at the destination and drop character
+			tween:Cancel() 
+			humanoid.PlatformStand = false
+			
+			-- 4. Wait for the player to die/respawn
+			-- If your game setup kills the player at the end automatically, we wait here:
+			if humanoid.Health > 0 then
+				-- Optional: force reset if the game environment doesn't do it automatically
+				-- humanoid.Health = 0 
+			end
+			
+			-- Wait until the character is dead/removed before counting the respawn time
+			while player.Character == character and humanoid.Health > 0 and isLooping do
+				task.wait(0.1)
+			end
+			
+			-- 5. Wait 5 seconds for respawn cooldown, then 0.5 seconds before repeating
 			task.wait(5)
-			
-			-- 4. Wait an additional 0.5 seconds before repeating
 			task.wait(0.5)
 		else
-			-- If character isn't loaded properly, wait a bit before retrying
 			task.wait(1)
 		end
 	end
@@ -91,12 +113,11 @@ toggleButton.MouseButton1Click:Connect(function()
 	isLooping = not isLooping
 	
 	if isLooping then
-		toggleButton.Text = "Auto-Farm: On"
-		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50) -- Green
-		-- Run the loop in a separate thread so it doesn't freeze the script
+		toggleButton.Text = "Loop: ON"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 		task.spawn(runLoop)
 	else
-		toggleButton.Text = "Auto-Farm: OFF"
-		toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50) -- Red
+		toggleButton.Text = "Loop: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
 	end
 end)
