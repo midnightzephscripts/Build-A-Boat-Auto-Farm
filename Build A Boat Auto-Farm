@@ -13,7 +13,7 @@ local SIMULATED_WALKSPEED = 200
 
 -- Create ScreenGUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "TeleportToggleGui"
+screenGui.Name = "AutoFarmToggleGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
@@ -22,14 +22,14 @@ local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0, 200, 0, 50)
 toggleButton.Position = UDim2.new(0.5, -100, 0.1, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
-toggleButton.Text = "AutoFarm: OFF"
+toggleButton.Text = "Auto-Farm: OFF"
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Font = Enum.Font.SourceSansBold
 toggleButton.TextSize = 24
 toggleButton.Parent = screenGui
 
 -- State Variable
-local isAutoFarming = false
+local isLooping = false
 
 -- Function to calculate duration based on distance and speed
 local function getTweenDuration(p1, p2, speed)
@@ -37,10 +37,15 @@ local function getTweenDuration(p1, p2, speed)
 	return distance / speed
 end
 
--- Main AutoFarm Function
-local function runAutoFarm()
-	while isAutoFarming do
-		local character = player.Character or player.CharacterAdded:Wait()
+-- Main Loop Function
+local function runLoop()
+	while isLooping do
+		-- Always get the fresh, alive character at the start of a loop
+		local character = player.Character
+		if not character or not character:IsDescendantOf(workspace) or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
+			character = player.CharacterAdded:Wait()
+		end
+		
 		local hrp = character:WaitForChild("HumanoidRootPart", 5)
 		local humanoid = character:WaitForChild("Humanoid", 5)
 		
@@ -66,40 +71,36 @@ local function runAutoFarm()
 				tweenCompleted = true
 			end)
 			
-			-- Monitor the tween actively
-			while not tweenCompleted and isAutoFarming and humanoid.Health > 0 do
+			-- Monitor the tween actively. If player dies, break immediately.
+			while not tweenCompleted and isLooping and humanoid.Health > 0 and character:IsDescendantOf(workspace) do
 				task.wait(0.1)
 			end
 			
-			-- Cleanup connection immediately
 			if connection then connection:Disconnect() end
+			tween:Cancel()
 			
-			-- 3. Drop to the floor / Handle interruption or death
-			if not isAutoFarming or humanoid.Health <= 0 then
-				tween:Cancel()
+			-- 3. Check if loop was disabled mid-travel
+			if not isLooping then
 				if humanoid.Health > 0 then
 					humanoid.PlatformStand = false
 				end
 				break
 			end
 			
-			-- Stop the tween explicitly at the destination and drop character
-			tween:Cancel() 
-			humanoid.PlatformStand = false
-			
-			-- 4. Wait for the player to die/respawn
-			-- If your game setup kills the player at the end automatically, we wait here:
+			-- 4. Handle End of Tween / Death Drop
 			if humanoid.Health > 0 then
-				-- Optional: force reset if the game environment doesn't do it automatically
-				-- humanoid.Health = 0 
+				humanoid.PlatformStand = false
+				
+				-- Monitor and wait until the character actually dies or is removed from workspace
+				while character:IsDescendantOf(workspace) and humanoid.Health > 0 and isLooping do
+					task.wait(0.1)
+				end
 			end
 			
-			-- Wait until the character is dead/removed before counting the respawn time
-			while player.Character == character and humanoid.Health > 0 and isAutoFarming do
-				task.wait(0.1)
-			end
+			-- If toggled off while waiting for death, stop here
+			if not isLooping then break end
 			
-			-- 5. Wait 5 seconds for respawn cooldown, then 0.5 seconds before repeating
+			-- 5. Standard Respawn Delays
 			task.wait(5)
 			task.wait(0.5)
 		else
@@ -110,14 +111,14 @@ end
 
 -- Toggle Button Logic
 toggleButton.MouseButton1Click:Connect(function()
-	isAutoFarming = not isAutoFarming
+	isLooping = not isLooping
 	
-	if isAutoFarming then
-		toggleButton.Text = "AutoFarm: ON"
+	if isLooping then
+		toggleButton.Text = "Auto-Farm: ON"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-		task.spawn(runAutoFarm)
+		task.spawn(runLoop)
 	else
-		toggleButton.Text = "AutoFarm: OFF"
+		toggleButton.Text = "Auto-Farm: OFF"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
 	end
 end)
