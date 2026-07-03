@@ -22,14 +22,14 @@ local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0, 200, 0, 50)
 toggleButton.Position = UDim2.new(0.5, -100, 0.1, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
-toggleButton.Text = "Loop: OFF"
+toggleButton.Text = "AutoFarm: OFF"
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggleButton.Font = Enum.Font.SourceSansBold
 toggleButton.TextSize = 24
 toggleButton.Parent = screenGui
 
 -- State Variable
-local isLooping = false
+local isAutoFarming = false
 
 -- Function to calculate duration based on distance and speed
 local function getTweenDuration(p1, p2, speed)
@@ -37,9 +37,9 @@ local function getTweenDuration(p1, p2, speed)
 	return distance / speed
 end
 
--- Main Loop Function
-local function runLoop()
-	while isLooping do
+-- Main AutoFarm Function
+local function runAutoFarm()
+	while isAutoFarming do
 		local character = player.Character or player.CharacterAdded:Wait()
 		local hrp = character:WaitForChild("HumanoidRootPart", 5)
 		local humanoid = character:WaitForChild("Humanoid", 5)
@@ -67,7 +67,7 @@ local function runLoop()
 			end)
 			
 			-- Monitor the tween actively
-			while not tweenCompleted and isLooping and humanoid.Health > 0 do
+			while not tweenCompleted and isAutoFarming and humanoid.Health > 0 do
 				task.wait(0.1)
 			end
 			
@@ -75,7 +75,7 @@ local function runLoop()
 			if connection then connection:Disconnect() end
 			
 			-- 3. Drop to the floor / Handle interruption or death
-			if not isLooping or humanoid.Health <= 0 then
+			if not isAutoFarming or humanoid.Health <= 0 then
 				tween:Cancel()
 				if humanoid.Health > 0 then
 					humanoid.PlatformStand = false
@@ -95,7 +95,7 @@ local function runLoop()
 			end
 			
 			-- Wait until the character is dead/removed before counting the respawn time
-			while player.Character == character and humanoid.Health > 0 and isLooping do
+			while player.Character == character and humanoid.Health > 0 and isAutoFarming do
 				task.wait(0.1)
 			end
 			
@@ -110,14 +110,14 @@ end
 
 -- Toggle Button Logic
 toggleButton.MouseButton1Click:Connect(function()
-	isLooping = not isLooping
+	isAutoFarming = not isAutoFarming
 	
-	if isLooping then
-		toggleButton.Text = "Loop: ON"
+	if isAutoFarming then
+		toggleButton.Text = "AutoFarm: ON"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-		task.spawn(runLoop)
+		task.spawn(runAutoFarm)
 	else
-		toggleButton.Text = "Loop: OFF"
+		toggleButton.Text = "AutoFarm: OFF"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
 	end
 end)
