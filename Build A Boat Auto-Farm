@@ -41,32 +41,40 @@ end
 -- Main Loop Function
 local function runLoop()
 	while isLooping do
-		-- 1. STRICT RESPAWN CHECKS: Always wait until health is 100% full
 		local character = player.Character
 		local humanoid = character and character:FindFirstChild("Humanoid")
 		
-		-- If character doesn't exist, is dead, or isn't fully healed, wait for respawn
-		while not character or not character:IsDescendantOf(workspace) or not humanoid or humanoid.Health < humanoid.MaxHealth do
-			if not isLooping then return end -- Kill execution if toggled off while waiting
+		-- Check if player is currently dead or character is missing
+		if not character or not character:IsDescendantOf(workspace) or not humanoid or humanoid.Health <= 0 then
+			-- Wait exactly 5 seconds after health hits 0
+			task.wait(5)
 			
-			player.CharacterAdded:Wait()
-			task.wait(0.2) -- Small buffer for instances to load
-			
-			character = player.Character
-			humanoid = character and character:FindFirstChild("Humanoid")
+			-- Wait for a completely new character to spawn and finish loading
+			if isLooping then
+				character = player.CharacterAdded:Wait()
+				humanoid = character:WaitForChild("Humanoid", 10)
+				
+				-- Ensure they are fully healed up before moving forward
+				while humanoid and humanoid.Health < humanoid.MaxHealth do
+					task.wait(0.1)
+				end
+			end
 		end
+		
+		-- Safety check in case toggle was turned off during the waits
+		if not isLooping then break end
 		
 		local hrp = character:WaitForChild("HumanoidRootPart", 5)
 		
 		if hrp and humanoid and humanoid.Health > 0 then
-			-- 2. Teleport to initial position
+			-- 1. Teleport to initial position
 			hrp.CFrame = CFrame.new(START_POS)
 			task.wait(0.2) 
 			
 			-- Enable PlatformStand so physics/falling states don't stop the tween
 			humanoid.PlatformStand = true
 			
-			-- 3. Setup and play Tween
+			-- 2. Setup and play Tween
 			local duration = getTweenDuration(START_POS, END_POS, SIMULATED_WALKSPEED)
 			local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut)
 			local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(END_POS)})
@@ -83,7 +91,7 @@ local function runLoop()
 				tweenCompleted = true
 			end)
 			
-			-- 4. Active Monitoring Loop (Checks every 0.1s for completion, death, or stuck status)
+			-- 3. Active Monitoring Loop (Checks every 0.1s for completion, death, or stuck status)
 			while not tweenCompleted and isLooping and humanoid.Health > 0 and character:IsDescendantOf(workspace) do
 				task.wait(0.1)
 				
@@ -92,7 +100,7 @@ local function runLoop()
 					timeStuck = timeStuck + 0.1
 					if timeStuck >= STUCK_THRESHOLD then
 						warn("[Auto-Farm] Character detected as stuck! Forcing reset...")
-						humanoid.Health = 0 -- Kill the character to force a refresh/respawn
+						humanoid.Health = 0 -- Kill the character to drop health to 0
 						break
 					end
 				else
@@ -110,7 +118,7 @@ local function runLoop()
 				break
 			end
 			
-			-- 5. Drop to floor / Post-Tween Wait
+			-- 4. Drop to floor / Post-Tween Wait
 			if humanoid.Health > 0 then
 				humanoid.PlatformStand = false
 				
@@ -120,12 +128,8 @@ local function runLoop()
 				end
 			end
 			
-			-- Final toggle safety check before going to respawn timers
-			if not isLooping then break end
-			
-			-- 6. Standard Respawn Delays
-			task.wait(5)
-			task.wait(0.5)
+			-- Short break to prevent engine strain before restarting the loop verification
+			task.wait(0.1)
 		else
 			task.wait(0.5)
 		end
@@ -145,5 +149,3 @@ toggleButton.MouseButton1Click:Connect(function()
 		toggleButton.BackgroundColor3 = Color3.fromRGB(240, 50, 50)
 	end
 end)
-
-```
